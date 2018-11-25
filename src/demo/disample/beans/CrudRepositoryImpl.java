@@ -7,6 +7,7 @@ import demo.disample.annotations.Table;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -39,24 +40,24 @@ public class CrudRepositoryImpl<ID, ENTITY> implements CrudRepository<ID, ENTITY
         private Map<String, String> columnsToFields = new HashMap<>();
 
         private void resolveTableName() throws Exception {
-            if (!entityClass.isAnnotationPresent(Table.class)) {
-                throw new Exception("Error resolving table name. Entity type " + entityClass.getName() + " don't have @Table annotation");
+            if (!getEntityClass().isAnnotationPresent(Table.class)) {
+                throw new Exception("Error resolving table name. Entity type " + getEntityClass().getName() + " don't have @Table annotation");
             }
 
-            tableName = ((Table) entityClass.getAnnotation(Table.class)).name();
+            setTableName(((Table) getEntityClass().getAnnotation(Table.class)).name());
         }
 
         private void resolveFields() throws Exception {
             int idsCount = 0;
-            for (Field field : entityClass.getDeclaredFields()) {
+            for (Field field : getEntityClass().getDeclaredFields()) {
                 if (field.isAnnotationPresent(Column.class)) {
                     String columnName = field.getAnnotation(Column.class).name();
 
-                    fieldsToColumns.put(field.getName(), columnName);
-                    columnsToFields.put(columnName, field.getName());
+                    getFieldsToColumns().put(field.getName(), columnName);
+                    getColumnsToFields().put(columnName, field.getName());
 
                     if (field.isAnnotationPresent(Id.class)){
-                        idFieldName = field.getName();
+                        setIdFieldName(field.getName());
                         idsCount++;
                     }
                 }
@@ -69,80 +70,127 @@ public class CrudRepositoryImpl<ID, ENTITY> implements CrudRepository<ID, ENTITY
             }
         }
 
+        String getColumnName(String fieldName){
+            return getFieldsToColumns().get(fieldName);
+        }
+
         String getIdColumnName(){
-            return fieldsToColumns.get(idFieldName);
+            return getColumnName(getIdFieldName());
+        }
+
+        public Class getIdClass() {
+            return idClass;
+        }
+
+        private void setIdClass(Class idClass) {
+            this.idClass = idClass;
+        }
+
+        public Class getEntityClass() {
+            return entityClass;
+        }
+
+        private void setEntityClass(Class entityClass) {
+            this.entityClass = entityClass;
+        }
+
+        public String getTableName() {
+            return tableName;
+        }
+
+        private void setTableName(String tableName) {
+            this.tableName = tableName;
+        }
+
+        public String getIdFieldName() {
+            return idFieldName;
+        }
+
+        private void setIdFieldName(String idFieldName) {
+            this.idFieldName = idFieldName;
+        }
+
+        public Map<String, String> getFieldsToColumns() {
+            return fieldsToColumns;
+        }
+
+        public Map<String, String> getColumnsToFields() {
+            return columnsToFields;
+        }
+
+        private void setColumnsToFields(Map<String, String> columnsToFields) {
+            this.columnsToFields = columnsToFields;
         }
     }
 
     private Metadata loadMetadata(Class idClass, Class entityClass) throws Exception {
         Metadata metadata = new Metadata();
-        metadata.idClass = idClass;
-        metadata.entityClass = entityClass;
+        metadata.setIdClass(idClass);
+        metadata.setEntityClass(entityClass);
         metadata.resolveTableName();
         metadata.resolveFields();
 
         return metadata;
     }
 
-    private String buildUpdateQuery(Map<String, String> fields){
-        if (fields == null)
-            throw new IllegalArgumentException("Field set is null");
+    private Map<String, Object> getEntityFieldValues(ENTITY obj) throws Exception {
+        Map<String, Object> fields = new HashMap<>();
 
-        if (fields.size() == 0)
-            throw new IllegalArgumentException("Field set is empty");
-
-        StringBuilder columns = new StringBuilder();
-        StringBuilder values = new StringBuilder();
-        boolean first = true;
-        for (Map.Entry entry: fields.entrySet()) {
-            if (!first){
-                columns.append(",");
-                values.append(",");
-            }
-            first = false;
-
-            columns.append(entry.getKey());
-            values.append("'").append(entry.getValue()).append("'");
-        }
-
-        return "UPDATE " + metadata.tableName + " SET (" + columns.toString() + ") VALUES (" + values.toString() + ")";
-    }
-
-    private String capitalizeWord(String word){
-        if (word == null)
-            return null;
-
-        if (word.isEmpty())
-            return word;
-
-        return word.substring(0, 1).toUpperCase() + word.substring(1);
-    }
-
-    private Map<String, String> getEntityFieldValues(ENTITY obj) throws Exception {
-        Map<String, String> fields = new HashMap<>();
-
-        for (Map.Entry entry: metadata.fieldsToColumns.entrySet()){
+        for (Map.Entry entry: metadata.getFieldsToColumns().entrySet()){
             String fieldName = (String) entry.getKey();
             Method method;
             try {
-                method = metadata.entityClass.getMethod("get" + capitalizeWord(fieldName));
+                method = metadata.getEntityClass().getMethod("get" + Utils.capitalizeWord(fieldName));
             } catch (NoSuchMethodException e) {
-                throw new Exception("Error getting field value of " + metadata.entityClass.getName() + ". Get method of field '" + fieldName + "' not found.");
+                throw new Exception("Error getting field value of " + metadata.getEntityClass().getName() + ". Get method of field '" + fieldName + "' not found.");
             }
 
-            String value = method.invoke(obj).toString();
+            Object value = method.invoke(obj);
 
             fields.put(fieldName, value);
         }
 
         return fields;
     }
-    
+
+    private Map<String, String> getColumnsAndValues(Map<String, Object> fieldValues){
+        Map<String, String> columnsAndValues = new HashMap<>();
+        for (Map.Entry entry: fieldValues.entrySet()){
+            columnsAndValues.put(metadata.getColumnName(entry.getKey().toString()), entry.getValue().toString());
+        }
+
+        return columnsAndValues;
+    }
+
+    private String getQueryFilterById(ID id){
+        if (id == null){
+            throw new NullPointerException("Id value must not be null");
+        }
+
+        return getQueryFilterById(id.toString());
+    }
+
+    private String getQueryFilterById(String id){
+        if (id == null){
+            throw new NullPointerException("Id value must not be null");
+        }
+
+        return String.format(" WHERE %s = '%s'", metadata.getIdColumnName(), id);
+    }
+
     @Override
     public ENTITY save(ENTITY obj) throws Exception {
         //System.out.println("Saving object {" + obj.toString() + "}");
 
-        String query = buildUpdateQuery(getEntityFieldValues(obj));
+        Map<String, String> values = getColumnsAndValues(getEntityFieldValues(obj));
+        String id = values.get(metadata.getIdColumnName());
+
+        String query;
+        if ((id == null) || (id.isEmpty()))
+            query = SQLQueryBuilder.buildInsertQuery(metadata.getTableName(), values);
+        else
+            query = SQLQueryBuilder.buildUpdateQuery(metadata.getTableName(), values) + getQueryFilterById(id);
+
         System.out.println(query);
 
         return obj;
@@ -150,10 +198,10 @@ public class CrudRepositoryImpl<ID, ENTITY> implements CrudRepository<ID, ENTITY
 
     @Override
     public ENTITY getOne(ID id){
-        System.out.println("SELECT * FROM " + metadata.tableName + " WHERE " + metadata.getIdColumnName() + " = " + id);
+        System.out.println("SELECT * FROM " + metadata.getTableName() + getQueryFilterById(id));
 
         try {
-            return (ENTITY) metadata.entityClass.newInstance();
+            return (ENTITY) metadata.getEntityClass().newInstance();
         } catch (InstantiationException | IllegalAccessException e) {
             e.printStackTrace();
             return null;
@@ -162,18 +210,22 @@ public class CrudRepositoryImpl<ID, ENTITY> implements CrudRepository<ID, ENTITY
 
     @Override
     public void delete(ID id) {
-        System.out.println("DELETE FROM " + metadata.tableName + " WHERE " + metadata.getIdColumnName() + " = " + id);
+        System.out.println("DELETE FROM " + metadata.getTableName() + getQueryFilterById(id));
     }
 
     @Override
     public List<ENTITY> listAll() {
-        System.out.println("SELECT * FROM " + metadata.tableName);
+        System.out.println("SELECT * FROM " + metadata.getTableName());
         return new ArrayList<>();
     }
 
     @Override
-    public List<ENTITY> findByConditions(String methodName, Object[] values) {
-        return null;
+    public List<ENTITY> findByConditions(String methodName, Object[] values) throws ParseException {
+        SQLQueryBuilder builder = new SQLQueryBuilder();
+
+        String query = "SELECT * FROM "  + metadata.getTableName() + " WHERE" + builder.parseQuery(methodName, metadata.fieldsToColumns , values);
+        System.out.println(query);
+        return new ArrayList<>();
     }
 
 }

@@ -33,6 +33,14 @@ public class ProductService {
         return productRepository.findByNameAndPrice(name, price);
     }
 
+    public List<Product> findProducts1(Double price1, Double price2){
+        return productRepository.findByPriceGreaterOrPriceNotLess(price1, price2);
+    }
+
+    public List<Product> findProducts2(Double price, String name){
+        return productRepository.findByPriceGreaterOrEqualOrNameNotEqual(price, name);
+    }
+
     public User saveUser(User user) throws Exception {
         return userRepository.save(user);
     }

@@ -9,19 +9,22 @@ import java.io.IOException;
 import java.lang.reflect.*;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 class BeanFactory {
     private final Map<String, Object> singletonBeans = new ConcurrentHashMap<>();
     private final Map<Class, Class> repositoryImplementations = new ConcurrentHashMap<>();
 
-    public Object getBean(String beanName){
+    public synchronized Object getBean(String beanName){
         return singletonBeans.get(beanName);
     }
 
     public Object getBean(Class clazz){
-        return singletonBeans.get(clazz.getName());
+        return getBean(clazz.getName());
     }
 
     private Object putBean(String beanName, Object bean){

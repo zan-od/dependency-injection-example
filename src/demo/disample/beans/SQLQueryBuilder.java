@@ -66,8 +66,11 @@ public class SQLQueryBuilder {
     }
 
     public static String buildUpdateQuery(String tableName, Map<String, String> fields){
+        if (tableName == null)
+            throw new NullPointerException("Table name is null");
+
         if (fields == null)
-            throw new IllegalArgumentException("Field set is null");
+            throw new NullPointerException("Field set is null");
 
         if (fields.size() == 0)
             throw new IllegalArgumentException("Field set is empty");
@@ -87,8 +90,11 @@ public class SQLQueryBuilder {
     }
 
     public static String buildInsertQuery(String tableName, Map<String, String> fields){
+        if (tableName == null)
+            throw new NullPointerException("Table name is null");
+
         if (fields == null)
-            throw new IllegalArgumentException("Field set is null");
+            throw new NullPointerException("Field set is null");
 
         if (fields.size() == 0)
             throw new IllegalArgumentException("Field set is empty");
@@ -111,6 +117,13 @@ public class SQLQueryBuilder {
     }
 
     public String parseQuery(String methodName, Map<String, String> fieldsToColumns, Object[] values) throws ParseException {
+        if (methodName == null)
+            throw new NullPointerException("Method name is null");
+        if (fieldsToColumns == null)
+            throw new NullPointerException("Fields is null");
+        if (values == null)
+            throw new NullPointerException("Values is null");
+
         String methodMagicWord = "findBy";
         if (!methodName.startsWith(methodMagicWord)) {
             throw new IllegalArgumentException(String.format("Error in '%s' method name. Method name must start with '%s'", methodName, methodMagicWord));
@@ -171,11 +184,6 @@ public class SQLQueryBuilder {
                 expectedType = ClauseType.LOGICAL;
 
             } else if (expectedType == ClauseType.LOGICAL){
-                if (currentCondition == null)
-                    throw newParseException("Error parsing method name ", methodName, " - previous condition is null", currentPosition);
-                if (currentCondition.field == null)
-                    throw newParseException("Error parsing method name ", methodName, " - previous condition's field is empty", currentPosition);
-
                 valueIndex = addCondition(queryBuilder, currentCondition, fields, values, valueIndex);
                 currentCondition = null;
 
@@ -200,10 +208,14 @@ public class SQLQueryBuilder {
         }
 
         if (currentCondition != null){
-            if (currentCondition.field == null)
-                throw newParseException("Error parsing method name ", methodName, " - previous condition's field is empty", currentPosition);
-
             addCondition(queryBuilder, currentCondition, fields, values, valueIndex);
+        }
+
+        if (queryBuilder.length() == 0){
+            throw new IllegalArgumentException(String.format("Error in '%s' method name. Method name don't contain conditions", methodName));
+        }
+        if (expectedType == ClauseType.FIELD){
+            throw newParseException("Error parsing method name ", methodName, " - wrong last clause type", currentPosition);
         }
 
         return queryBuilder.toString();

@@ -1,4 +1,6 @@
 /target/
+/out/
+/.mvn/
 
 ### IntelliJ IDEA ###
 .idea
